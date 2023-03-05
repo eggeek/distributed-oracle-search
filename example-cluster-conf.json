@@ -1,0 +1,11 @@
+{
+  "workers": ["localhost", "localhost"],
+  "nfs": "/tmp",
+  "projectdir": "~/projects/Time-Dependant-Oracle-Search-RA/distributed-oracle-search/",
+  "partmethod": "div",
+  "partkey": 8400,
+  "outdir": "./index",
+  "xy_file": "./data/melb-both.xy",
+  "scenfile": "./data/full.scen",
+  "diffs": "./data/melb-both.xy.diff"
+}
