@@ -3,7 +3,7 @@
 execs=(
   "make_cpd_auto" 
   "gen_distribute_conf" 
-  "fifo"
+  "fifo_auto"
 )
 
 function install() {

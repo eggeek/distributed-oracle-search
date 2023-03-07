@@ -27,16 +27,16 @@ def call_worker(wid, conf):
 def test():
     test_conf = {
       "nfs": "/tmp",
-      "partmethod": "div",
-      "partkey": 10,
+      "partmethod": "mod",
+      "partkey": 100,
       "outdir": "./index",
       "xy_file": "./data/melb-both.xy",
       "scenfile": "./data/full.scen",
-      "diffs": "./data/melb-both.xy.diff",
+      "diffs": ["./data/melb-both.xy.diff"],
       "projectdir": "~/projects/Time-Dependant-Oracle-Search-RA/distributed-oracle-search"
     }
 
-    maxworker = 9000
+    maxworker = 100
     test_conf["workers"] = ["localhost" for i in range(maxworker)]
     call_worker(0, test_conf)
 

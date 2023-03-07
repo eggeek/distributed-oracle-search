@@ -5,7 +5,10 @@ from os.path import isfile, join
 parser = argparse.ArgumentParser(description="Process some integers.")
 
 parser.add_argument("-v", "--verbose", action="count", default=0)
+parser.add_argument("-t", "--test", action="store_true")
 parser.add_argument("-D", "--debug", action="store_true")
+parser.add_argument("-w", "--worker", type=int, default=-1, help=
+        "sending query to a specific worker, default is -1 (all)")
 
 parts = parser.add_mutually_exclusive_group()
 parts.add_argument(

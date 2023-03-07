@@ -16,8 +16,6 @@ from subprocess import getstatusoutput
 from collections import defaultdict
 
 
-fifo = "/tmp/warthog.fifo"
-answer = "/tmp/warthog.answer"
 node2worker = {}
 
 
@@ -34,7 +32,7 @@ def read_p2p(sce_name):
     return reqs
 
 
-def make_parts(reqs, maxworker):
+def make_parts(reqs, nodenum, maxworker, partmethod, partkey, activew):
     """
         assign peuries to each worker, based on result from distribute controller
         return [
@@ -58,27 +56,18 @@ def make_parts(reqs, maxworker):
     for s, t in reqs:
         wid = node2worker[t]
         assert(wid is not None)
-        groups[wid].append([s, t])
-    parts = [groups[i] for i in range(maxworker)]
+        if activew == -1 or wid == activew:
+            groups[wid].append([s, t])
+
+    parts = [groups[i] for i in range(maxworker) if groups.get(i) is not None]
     return code, parts
 
 
-def send_local(qname, config):
-    with open(fifo, "w") as f:
-        f.write(config)
-
-    out = ""
-    os.mkfifo(answer)
-    with open(answer, "r") as f:
-        for line in f:
-            out = line.strip()  # Should be a single line
-
-    os.remove(answer)
-
-    return 0, out
-
-
-def send_remote(hostname, fname, qname, config):
+def send_remote(hostname, fname, qname, config, answer=None, fifo=None):
+    if answer is None:
+        answer = "/tmp/warthog.answer"
+    if fifo is None:
+        fifo = "/tmp/warthog.fifo"
     with open(fname, "w") as f:
         f.write(f"mkfifo {answer}\n")
         f.write(f"cat <<CONF > {fifo}\n")  # HEREDOC
@@ -90,12 +79,16 @@ def send_remote(hostname, fname, qname, config):
     return getstatusoutput(f"ssh {hostname} 'bash -s' < {fname}")
 
 
-def send_queries(hostname, nfs, config, dname, reqs):
-    fname = f"query.{hostname}"
+def send_queries(hostname, workerid, nfs, config, dname, reqs):
+    fname = f"query.{hostname}{workerid}"
     qname = join(nfs, fname)  # Query files need to be unique
     nb_reqs = len(reqs)
+    fifo  = f"/tmp/worker{workerid}.fifo"
+    answer = f"/tmp/worker{workerid}.answer"
     # Runtime configuration for the resident process(es)
     conf = json.dumps(config) + "\n" + "{} {} {}\n".format(qname, answer, dname)
+
+    print(f"sending {nb_reqs} to {hostname}, conf:\n", conf)
 
     with Timer() as t_prepare:
         with open(qname, "w") as f:
@@ -104,10 +97,7 @@ def send_queries(hostname, nfs, config, dname, reqs):
 
     print(f"Processing {nb_reqs} queries on '{hostname}'")
     with Timer() as t_partition:
-        if hostname == "localhost":
-            code, out = send_local(qname, conf)
-        else:
-            code, out = send_remote(hostname, fname, qname, conf)
+        code, out = send_remote(hostname, fname, qname, conf, answer, fifo)
 
     if code == 0:
         res = out.split(",")
@@ -139,8 +129,7 @@ def get_node_num(xyfile):
         _, num, _, _ = line.split(' ')
     return int(num)
 
-def main(args):
-    conf       = json.load("./part-example-conf.json")
+def run(conf, args):
     sce_name   = conf['scenfile']
     diffs      = conf['diffs']
     hosts      = conf['workers']
@@ -149,6 +138,8 @@ def main(args):
     nfs        = conf['nfs']
     nodenum    = get_node_num(conf['xy_file'])
     maxworker  = len(hosts)
+    # sending query to a specific worker, -1 means to all workers
+    worker     = args.worker
 
     with Timer() as r:
         reqs   = read_p2p(sce_name)
@@ -168,22 +159,28 @@ def main(args):
         "no_cache": args.no_cache,
     }
 
+    wids = range(maxworker)
+    if worker != -1:
+        hosts = [hosts[worker]]
+        wids = [worker]
     print(f"Preparing to send {total_qs} queries to {hosts}.")
     with Timer() as w:
-        code, parts = make_parts(reqs, maxworker)
+        code, parts = make_parts(reqs, nodenum, maxworker, partmethod, partkey, worker)
         if code:
-            print(code, out)
+            print(code, parts)
             exit(1)
+    for part in parts:
+        print("#queries:", len(part))
 
     with Timer() as p:
         stats = []
         # Run one experiment per diff
         for i, dname in enumerate(diffs):
-            workload = zip(hosts, cycle([nfs]), cycle([worker_conf]), cycle([dname]), parts)
+            workload = zip(hosts, wids, cycle([nfs]), cycle([worker_conf]), cycle([dname]), parts)
             with Pool(maxworker) as pool:
                 results = [
-                    pool.apply_async(send_queries, worker)
-                    for worker in workload if len(worker[-1]) > 0
+                    pool.apply_async(send_queries, load)
+                    for load in workload if len(load[-1]) > 0
                 ]
                 stats.append([res.get() for res in results])
 
@@ -194,8 +191,9 @@ def main(args):
         "t_workload": w.interval,
         "t_process": p.interval,
     }
+    return data, stats
 
-
+def output(data, stats, args):
     # Header for partitions' results (in CSV)
     header = [
         "expe",
@@ -240,6 +238,31 @@ def main(args):
             writer.writerow(header)
             writer.writerows([[i] + row for i, row in stats])
 
+def test(args):
+    conf =  {
+      "nfs": "/tmp",
+      "partmethod": "mod",
+      "partkey": 100,
+      "outdir": "./index",
+      "xy_file": "./data/melb-both.xy",
+      "scenfile": "./data/full.scen",
+      "diffs": ["./data/melb-both.xy.diff"],
+      "projectdir": "~/projects/Time-Dependant-Oracle-Search-RA/distributed-oracle-search"
+    }
+    maxworker = 100
+    conf["workers"] = ["localhost" for i in range(maxworker)]
+
+    data, stats = run(conf, args)
+    output(data, stats, args)
+
+def main(args):
+    if args.test:
+        test(args)
+        return
+
+    conf = json.load(open("./example-cluster-conf.json", "r"))
+    data, stats = run(conf, args)
+    output(data, stats, args)
 
 
 if __name__ == "__main__":
