@@ -1,24 +1,25 @@
 # This script is called at the head node
-# Call workers to create CPDs based on cluster config
-
+# Call workers to start fifo based on cluster config
 
 from subprocess import getstatusoutput
 import json
-from sys import argv
 import argparse
+from sys import argv
 
 def call_worker(wid, conf):
     host       = conf['workers'][wid]
-    name       = f"worker-{wid}"
+    name       = f"fifo-{wid}"
     xyfile     = conf["xy_file"]
     partmethod = conf["partmethod"]
     partkey    = conf["partkey"]
     maxworker  = len(conf["workers"])
     outdir     = conf["outdir"]
     projdir    = conf["projectdir"]
+    diff       = conf['diffs'][0]
     cd         = f"cd {projdir}"
-    makecpd    = f"./bin/make_cpd_auto --input {xyfile} --partmethod {partmethod} --partkey {partkey} --workerid {wid} --maxworker {maxworker} --outdir {outdir}"
-    cmd        = f"ssh {host} \"{cd}; tmux new -As {name} -d '{makecpd}'\""
+    alg        = "table-search"
+    makefifo   = f"./bin/fifo_auto --input {xyfile} {diff} --partmethod {partmethod} --partkey {partkey} --workerid {wid} --maxworker {maxworker} --outdir {outdir} --alg {alg}"
+    cmd        = f"ssh {host} \"{cd}; tmux new -As {name} -d '{makefifo}'\""
     print(cmd)
     code, out = getstatusoutput(cmd)
     if code:
@@ -60,7 +61,6 @@ def main():
             call_worker(i, cluster_conf)
     else:
         call_worker(worker, cluster_conf)
-
 
 if __name__ == "__main__":
     main()
