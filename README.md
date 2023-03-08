@@ -15,7 +15,12 @@ You can quickly run a demo by following steps:
 1. `./install.sh fast`: compile executable in `pathfinding` and copy them to `./bin` 
 2. `python make_cpds.py -t`: precompute CPDs on different workers based on a predefined testing configuration file (`-t`)
 3. `python make_fifos.py -t`: start a resident service on each worker based on a predefined testing configuration file (`-t`)
-3. `python process_query.py -t`: assign queries to each worker based on a predefined testing configuration file (`-t`)
+4. `python process_query.py -t`: assign queries to each worker based on a predefined testing configuration file (`-t`)
+5. Requirements:
+  - `python3`
+  - `openmp`: for process CPDs in parallel
+  - `ssh`: for communication between workers and the head node
+  - `tmux`: for monitoring resident process on workers (e.g., when a worker is computing a CPD, user can connect to a tmux session to check the progress)
 
 ## Cluster Configuration
 
