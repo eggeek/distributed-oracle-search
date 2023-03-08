@@ -255,15 +255,15 @@ def test(args):
     data, stats = run(conf, args)
     output(data, stats, args)
 
-def main(args):
+def main():
     if args.test:
         test(args)
         return
-
-    conf = json.load(open("./example-cluster-conf.json", "r"))
-    data, stats = run(conf, args)
+    conf_path = args.c
+    cluster_conf = json.load(open(conf_path, "r"))
+    data, stats = run(cluster_conf, args)
     output(data, stats, args)
 
 
 if __name__ == "__main__":
-    main(args)
+    main()

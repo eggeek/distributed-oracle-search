@@ -8,6 +8,15 @@ This repository is organised into three parts:
 3. `data/` The graph representation of Melbourne's road network under the
    free-flow assumption and with congestion, and the full scenario file.
 
+## TLDR
+
+You can quickly run a demo by following steps:
+
+1. `./install.sh fast`: compile executable in `pathfinding` and copy them to `./bin` 
+2. `python make_cpds.py -t`: precompute CPDs on different workers based on a predefined testing configuration file (`-t`)
+3. `python make_fifos.py -t`: start a resident service on each worker based on a predefined testing configuration file (`-t`)
+3. `python process_query.py -t`: assign queries to each worker based on a predefined testing configuration file (`-t`)
+
 ## Cluster Configuration
 
 - Keys:
@@ -24,7 +33,20 @@ This repository is organised into three parts:
   - `diffs`: the path of diff files, for experiments on perturbed graphs
   - `projectdir`: the directory of the project, will be used after ssh to the worker
 
-- See an example [here](./part-example-conf.json)
+- Example:
+  ```json
+  {
+    "workers": ["localhost", "localhost", "localhost"],
+    "nfs": "/tmp",
+    "projectdir": "~/projects/Time-Dependant-Oracle-Search-RA/distributed-oracle-search/",
+    "partmethod": "mod",
+    "partkey": 3,
+    "outdir": "./index",
+    "xy_file": "./data/melb-both.xy",
+    "scenfile": "./data/full.scen",
+    "diffs": ["./data/melb-both.xy.diff"]
+  }
+  ```
 
 ## To compile the code
 
@@ -32,12 +54,13 @@ This repository is organised into three parts:
 ./install.sh dev
 ./install.sh fast
 ```
-Compile executable with "dev" or "fast" flag, and copy executables to folder "./bin".
+Compile executable with "dev" (for testing) or "fast" flag, and copy executables to folder "./bin".
 
 You can also compile executables manually:
 
 ``` sh
 cd pathfinding/warthog && make fast [-j]
+cd pathfinding/warthog && make dev [-j]
 ```
 
 The `Makefile` should take care of compiling executables in `build/fast/bin`.
@@ -49,7 +72,7 @@ You will need Python 3.
 Preprocessing and query processing tasks are distributed to multiple workers.
 We use `./pathfinding/warthog/src/util/distribution_controller.h` to control the partitioning. 
 
-We use a program (**TBD**) to generate a configuration file to describe which nodes are send to which worker and it will be sent to Python scripts.
+We use a program (`./bin/gen_distribute_conf`) to generate a configuration file to describe which nodes are send to which worker and it will be sent to Python scripts.
 
 ## Computing a CPD
 
@@ -58,7 +81,7 @@ In the below example, we compute cpd for the **subset** of nodes of input graph 
 where the **subset** is defined by the partitioning method (`--partition div --partkey 5`) and the maximum number of workers (`--maxworker 5`).
 
 ``` sh
-bin/make_cpd --input melb-both.xy --partition div --partkey 5 --workerid 1 --maxworker 5
+bin/make_cpd_auto --input melb-both.xy --partition div --partkey 5 --workerid 1 --maxworker 5
 ```
 
 It will create one or more CPDs, and their filenames are auto-generated (see in `./pathfinding/warthog/programs/make_cpd_auto.cpp`).
@@ -66,44 +89,47 @@ The default directory of these CPDs are same as the input file, this can be cont
 
 - **Note:** The script will run with all available threads.
 
-## To run the code
+To create CPDs on different workers, you can run this script at the head node:
 
-First, start a resident process (worker) with:
-
-``` sh
-bin/fifo --input <graph.xy> --alg [ cpd-search | cpd | ch ]
+```sh
+python make_cpds.py -c ./example-cluster-conf.json
 ```
 
-The executable `fifo` expects three files:
+or manually ssh to each worker and run the `./bin/make_cpd_auto` command.
 
-1. `<graph>.xy` Original xy-graph.
-2. `<graph>.xy.diff` The modified (congested) xy-graph.
-3. `<graph>.xy.cpd` The CPD for the original graph.
+## To run the code
 
-You can specify three entries after `--input` if your files do not respect this
-convention.
+You can manually ssh to each worker and start a resident process with:
 
-- **Note:** This will run with all available threads by default, this can be
-  disabled by compiling with `-DSINGLE_THREAD`. But, this does not do any work
-  while waiting -- i.e., we simply build one search object per thread. You can
-  then specify how many threads an experiment has access to with a flag on the
-  driver; see below.
+``` sh
+./bin/fifo_auto --input ./data/melb-both.xy ./data/melb-both.xy.diff --partition mod --partkey 100 --workerid 0 --maxworker 100 --outdir ./index --alg table-search
+```
+
+or run the script at the head node:
+
+```sh
+python make_fifos.py -c ./example-cluster-conf.json
+```
 
 Then, we can run experiments with:
 
 ``` sh
-python offline.py --scenario <file.scen>
+python process_query.py -c ./example-cluster-conf.json
 ```
-
-You can then set further parameters to tweak the experiments, please use `python
-offline.py --help` for a list of valid parameters.
 
 - **Note:** The experiments script can only handle *one partition per worker*,
   or a single one on the driver. If you run more than that, you may end up in a
   deadlock (with multiple writers garbling the data on the FIFO).
 
-### Runing without congestion
+## TODO
 
-For algorithms that do not handle congestion (CH and CPD extractions), you need
-only provide one entry if using the default setup, or two if you have a custom
-setup.
+- Running without congestion
+
+  For algorithms that do not handle congestion (CH and CPD extractions), you need
+  only provide one entry if using the default setup, or two if you have a custom
+  setup.
+
+- Multiple partitions on same worker
+
+  Current implementation only support one partition per worker.
+

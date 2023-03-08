@@ -6,6 +6,8 @@ parser = argparse.ArgumentParser(description="Process some integers.")
 
 parser.add_argument("-v", "--verbose", action="count", default=0)
 parser.add_argument("-t", "--test", action="store_true")
+parser.add_argument("-c", type=str, default="./example-cluster-conf.json",
+        help="load the config file")
 parser.add_argument("-D", "--debug", action="store_true")
 parser.add_argument("-w", "--worker", type=int, default=-1, help=
         "sending query to a specific worker, default is -1 (all)")
@@ -108,9 +110,6 @@ files.add_argument(
     help="Directory containing the map files.",
 )
 files.add_argument("-m", "--map", type=str, default="square01.map", help="Map to use.")
-files.add_argument(
-    "-c", "--cpd", type=str, default="test-square01.map", help="CPD file to load."
-)
 files.add_argument(
     "--scenario",
     type=str,
